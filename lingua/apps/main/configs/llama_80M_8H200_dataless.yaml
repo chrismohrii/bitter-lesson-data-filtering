@@ -1,0 +1,124 @@
+dump_base: out
+name: llama_1B_8H200
+steps: 63_578  # chinchilla optimal - 1525879 steps w/ 2048 slen and bsz 8. Divide by 24 with 8 gpus at 3 acc.
+probe_freq: null
+seed: 777
+grad_acc_steps: 3
+
+optim:
+  lr: 5e-3
+  weight_decay: 0.01
+  warmup: 500
+  lr_min_ratio: 0.000001 #1
+  clip: 1.0
+
+distributed:
+  fsdp_type: no_shard
+  dp_replicate: 8
+  compile: true
+  model_dtype: bf16
+  matmul_allow_tf32: false
+  selective_activation_checkpointing: false
+  tp_size: 1
+
+model:
+  dim: 512
+  n_layers: 8
+  n_heads: 8
+  qk_norm: true
+
+data:
+  root_dir: !!!CHANGE_THIS!!!  # path to your tokenized data directory
+  batch_size: 8
+  prefetch_size: 1024
+  seq_len: 1024
+  n_views: 2
+  load_async: true
+  add_bos: true
+  add_eos: true
+  tokenizer:
+    name: tiktoken
+    path: !!!CHANGE_THIS!!!  # path to r50k_base_tokenizer file (included at bitter_lesson_code/r50k_base_tokenizer/0ea1e91bbb3a60f729a8dc8f777fd2fc07cd8df4)
+
+profiling:
+  run: false
+
+checkpoint:
+  dump:
+    every: 2500
+    keep: 1
+  eval:
+    every: 15000
+    keep: 1
+  async_save_mode: "shm"
+  async_cleanup: true
+
+logging:
+  freq: 1
+  wandb:
+    project: lingua-tests
+    name: llama_1B_8H200
+
+async_eval_gpus: 1
+eval:
+  harness:
+    tasks:
+      - hellaswag
+      - task: boolq
+        dataset_kwargs:
+          trust_remote_code: true
+      - piqa
+      - task: social_iqa
+        dataset_kwargs:
+          trust_remote_code: true
+      - winogrande
+      - openbookqa
+      - arc_easy
+      - arc_challenge
+      - race
+      - commonsense_qa
+      #- mmlu
+      #- mmlu_continuation
+      - gpqa_main_n_shot
+      - truthfulqa_mc2
+      # - bigbench_cs_algorithms_multiple_choice
+      #- task: nq_open # generate until
+      #  num_fewshot: 5
+      #- triviaqa # generate until
+      #- gsm8k # generate until
+      #- hendrycks_math # generate until
+  validation:
+    max_steps: 1000
+    root_dir: !!!CHANGE_THIS!!!  # path to your validation data directory
+    sources: 
+    - fineweb_edu_shuffled
+    - c4_en_shuffled
+    - cosmopedia_v2_shuffled
+    - dclm_pool_1b_1x_shuffled
+  generator:
+    max_tokens: 16384
+    dtype: bf16
+    show_progress: true
+    reduce_generation_overhead: true
+  core_metrics:
+    hellaswag_acc_norm: 1.0
+    piqa_acc_norm: 1.0
+    social_iqa_acc: 1.0
+    openbookqa_acc_norm: 1.0
+    arc_easy_acc: 1.0
+    arc_challenge_acc_norm: 1.0
+    race_acc: 1.0
+    mmlu_continuation_acc: 1.0
+
+
+# slurm is used for async eval
+slurm:
+  account: !!!CHANGE_THIS!!!  # your slurm account
+  partition: !!!CHANGE_THIS!!!  # your slurm partition
+  ngpu: 1
+  ncpu: 16
+  constraint: "[48G|80G|141G]"
+  mem: 64G
+  anaconda: lingua_241127
+  time: 1440  # 24 hours
+
